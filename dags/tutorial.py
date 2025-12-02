@@ -93,6 +93,11 @@ with DAG(
         retries=3,
     )
 
+    t4 = EmailOperator(
+        to="test@example.com", "Testing", "<body>Hello</body>", files=None, cc=None, bcc=None, 
+        mime_subtype='mixed', mime_charset='utf-8', conn_id="mailhog_conn"
+    )
+
     # [END basic_task]
 
     # [START documentation]
@@ -130,5 +135,5 @@ with DAG(
     )
     # [END jinja_template]
 
-    t1 >> [t2, t3]
+    t1 >> [t2, t3] >> t4
 # [END tutorial]
