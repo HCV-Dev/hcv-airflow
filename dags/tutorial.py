@@ -72,7 +72,7 @@ with DAG(
     # t1, t2 and t3 are examples of tasks created by instantiating operators
     # [START basic_task]
 
-[docs]
+
     t1 = BashOperator(
         task_id="print_date",
         bash_command="date",
@@ -85,6 +85,14 @@ with DAG(
         bash_command="sleep 5",
         retries=3,
     )
+
+    t3 = BashOperator(
+        task_id="sleep",
+        depends_on_past=False,
+        bash_command="sleep 5",
+        retries=3,
+    )
+
     # [END basic_task]
 
     # [START documentation]
