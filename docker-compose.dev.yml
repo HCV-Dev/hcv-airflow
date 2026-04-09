@@ -1,0 +1,204 @@
+# HCV Airflow — local development.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# With local DAGs mount (skip git-sync, edit DAGs live):
+#   DAGS_LOCAL=../hcv-airflow-dags docker compose -f docker-compose.dev.yml up -d
+#
+# Airflow UI:  http://localhost:8080  (airflow / airflow)
+# Mailhog UI:  http://localhost:8025
+---
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+
+    # ── SMTP → Mailhog ──────────────────────────────────────────────────
+    AIRFLOW__SMTP__SMTP_HOST: mailhog
+    AIRFLOW__SMTP__SMTP_PORT: 1025
+    AIRFLOW__SMTP__SMTP_MAIL_FROM: airflow@example.com
+
+    # ── HCV connections (local dev defaults) ─────────────────────────────
+    AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}
+    AIRFLOW_CONN_HCV_REPORTING_DB: ${HCV_REPORTING_DB_URL:-postgresql://hcv_reporting:hcv_reporting@host.docker.internal:5433/hcv_reporting}
+
+    # ── HCV variables for DAGs ───────────────────────────────────────────
+    AIRFLOW_VAR_HCV_ENVIRONMENT: hcv-dev
+
+  volumes:
+    - ${DAGS_REPO_PATH:-../hcv-airflow-dags}:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config:/opt/airflow/config
+    - ./plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  depends_on:
+    &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: hcv-airflow-postgres-dev
+    restart: always
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  redis:
+    image: redis:7.2-bookworm
+    container_name: hcv-airflow-redis-dev
+    restart: always
+    expose:
+      - 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: hcv-airflow-mailhog-dev
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: hcv-airflow-apiserver-dev
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: hcv-airflow-scheduler-dev
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: hcv-airflow-dag-processor-dev
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-worker:
+    <<: *airflow-common
+    container_name: hcv-airflow-worker-dev
+    command: celery worker
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-apiserver:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: hcv-airflow-triggerer-dev
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: hcv-airflow-init-dev
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -v -p /opt/airflow/{logs,dags,plugins,config}
+        /entrypoint airflow version
+        chown -R "$${AIRFLOW_UID:-50000}:0" /opt/airflow/
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+    user: "0:0"
+
+volumes:
+  airflow-pgdata-dev:
