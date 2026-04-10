@@ -88,6 +88,8 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        git config --global --add safe.directory /dags
+
         # Build authenticated URL if credentials are provided
         if [ -n "$$GIT_USER" ] && [ -n "$$GIT_PAT" ]; then
           AUTH_URL=$$(echo "$$REPO_URL" | sed "s|https://|https://$$GIT_USER:$$GIT_PAT@|")
