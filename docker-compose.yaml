@@ -81,17 +81,33 @@ services:
       - airflow-dags:/dags
     environment:
       REPO_URL: ${DAGS_REPO_URL:-https://github.com/HCV-Dev/hcv-airflow-dags.git}
+      GIT_USER: ${DAGS_GIT_USER:-}
+      GIT_PAT: ${DAGS_GIT_PAT:-}
       BRANCH: ${DAGS_REPO_BRANCH:-main}
       SYNC_INTERVAL: ${DAGS_SYNC_INTERVAL:-60}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        # Build authenticated URL if credentials are provided
+        if [ -n "$$GIT_USER" ] && [ -n "$$GIT_PAT" ]; then
+          AUTH_URL=$$(echo "$$REPO_URL" | sed "s|https://|https://$$GIT_USER:$$GIT_PAT@|")
+        else
+          AUTH_URL="$$REPO_URL"
+        fi
+
         if [ ! -d /dags/.git ]; then
           echo "[git-sync] Cloning $$REPO_URL (branch: $$BRANCH)..."
-          git clone --branch "$$BRANCH" --single-branch --depth 1 "$$REPO_URL" /dags
+          rm -rf /dags/*  /dags/.[!.]* 2>/dev/null || true
+          git clone --branch "$$BRANCH" --single-branch --depth 1 "$$AUTH_URL" /dags
+          if [ $$? -ne 0 ]; then
+            echo "[git-sync] ERROR: Clone failed. Check REPO_URL, credentials, and network access."
+            sleep 30
+            exit 1
+          fi
         fi
         while true; do
           cd /dags
+          git remote set-url origin "$$AUTH_URL"
           git fetch origin "$$BRANCH" --depth 1
           git reset --hard "origin/$$BRANCH"
           echo "[git-sync] Synced at $$(date -Iseconds) — $$(git log -1 --format='%h %s')"
