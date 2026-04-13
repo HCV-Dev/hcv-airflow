@@ -16,6 +16,7 @@
 #   DAGS_SYNC_INTERVAL        — seconds between git pulls (default: 60)
 #   AIRFLOW_PORT              — host port for the API server (default: 8080)
 #   FERNET_KEY                — encryption key for connections (generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+#   API_SECRET_KEY            — shared JWT signing key for API server ↔ worker auth (generate: python -c "import secrets; print(secrets.token_urlsafe(32))")
 #
 # Portainer usage:
 #   Create a stack per branch, set the environment variables above.
@@ -33,6 +34,8 @@ x-airflow-common:
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@${STACK_NAME:-hcv-airflow}-postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://:@${STACK_NAME:-hcv-airflow}-redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY:-}
+    AIRFLOW__API__AUTH_BACKEND: 'airflow.api.auth.backend.jwt'
+    AIRFLOW__API_AUTH__JWT_SECRET: ${INTERNAL_API_SECRET_KEY:-}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://${STACK_NAME:-hcv-airflow}-apiserver:8080/execution/'

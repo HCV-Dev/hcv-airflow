@@ -27,4 +27,5 @@ RUN pip install --no-cache-dir \
     pandas \
     pyodbc \
     psycopg2-binary \
-    sqlalchemy>=2.0
+    sqlalchemy>=2.0 \
+    apache-airflow-providers-microsoft-mssql

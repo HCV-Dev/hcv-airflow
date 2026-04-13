@@ -142,7 +142,7 @@ Deployed per branch on the shared `hcv-net` network.
 
 The `Dockerfile` extends the official Airflow image with:
 - ODBC Driver 18 for SQL Server
-- `pandas`, `pyodbc`, `psycopg2-binary`, `sqlalchemy`
+- `pandas`, `pyodbc`, `psycopg2-binary`, `sqlalchemy`, `apache-airflow-providers-microsoft-mssql`
 
 Built and pushed to GHCR on push to `main` or `training`:
 - `ghcr.io/<owner>/hcv-airflow:main`
