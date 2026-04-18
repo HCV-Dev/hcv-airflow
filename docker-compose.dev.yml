@@ -29,6 +29,7 @@ x-airflow-common:
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    AIRFLOW_UID: ${AIRFLOW_UID:-50000}
 
     # ── SMTP → Mailhog ──────────────────────────────────────────────────
     AIRFLOW__SMTP__SMTP_HOST: mailhog
@@ -192,7 +193,7 @@ services:
       - |
         mkdir -v -p /opt/airflow/{logs,dags,plugins,config}
         /entrypoint airflow version
-        chown -R "$${AIRFLOW_UID:-50000}:0" /opt/airflow/
+        chown -R "$${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins}
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'

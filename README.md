@@ -120,6 +120,7 @@ Deployed per branch on the shared `hcv-net` network.
 | `HCV_ICU_CONN_STRING` | ICU SQL Server ODBC connection string |
 | `HCV_REPORTING_DB_URL` | Reporting PostgreSQL connection string |
 | `AIRFLOW_ADMIN_PASSWORD` | Admin UI password |
+| `SENDGRID_API_KEY` | SendGrid API key for email notifications |
 
 ### Optional environment variables
 
@@ -129,7 +130,10 @@ Deployed per branch on the shared `hcv-net` network.
 | `AIRFLOW_IMAGE_NAME` | `ghcr.io/hcv-dev/hcv-airflow:latest` | Custom Airflow image |
 | `DAGS_SYNC_INTERVAL` | `60` | Seconds between git pulls |
 | `FERNET_KEY` | (empty) | Encryption key for stored connections |
-| `SMTP_HOST` | `mailhog` | SMTP server for notifications |
+| `SMTP_HOST` | `smtp.sendgrid.net` | SMTP server for notifications |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | `apikey` | SMTP username (SendGrid requires the literal `apikey`) |
+| `SMTP_FROM` | `airflow@hcv.co.za` | From address on notification emails |
 
 ### Connections (auto-configured)
 
@@ -142,7 +146,7 @@ Deployed per branch on the shared `hcv-net` network.
 
 The `Dockerfile` extends the official Airflow image with:
 - ODBC Driver 18 for SQL Server
-- `pandas`, `pyodbc`, `psycopg2-binary`, `sqlalchemy`, `apache-airflow-providers-microsoft-mssql`
+- `pandas`, `pyodbc`, `psycopg2-binary`, `sqlalchemy`, `apache-airflow-providers-microsoft-mssql`, `apache-airflow-providers-ssh`
 
 Built and pushed to GHCR on push to `main` or `training`:
 - `ghcr.io/<owner>/hcv-airflow:main`

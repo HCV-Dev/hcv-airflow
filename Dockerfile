@@ -28,4 +28,6 @@ RUN pip install --no-cache-dir \
     pyodbc \
     psycopg2-binary \
     sqlalchemy>=2.0 \
-    apache-airflow-providers-microsoft-mssql
+    apache-airflow-providers-microsoft-mssql \
+    apache-airflow-providers-ssh \
+    apache-airflow-providers-sendgrid
