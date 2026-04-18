@@ -66,6 +66,7 @@ x-airflow-common:
     AIRFLOW__SMTP__SMTP_USER: ${SMTP_USER:-apikey}
     AIRFLOW__SMTP__SMTP_PASSWORD: ${SENDGRID_API_KEY:-}
     AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_FROM:-airflow@hcv.co.za}
+    AIRFLOW__EMAIL__FROM_EMAIL: ${SMTP_FROM:-airflow@hcv.co.za}
     # Extras pin STARTTLS on / implicit-SSL off so the hook can't fall back to
     # stale cfg defaults — avoids SSL: WRONG_VERSION_NUMBER on port 587.
     AIRFLOW_CONN_SMTP_DEFAULT: smtp://${SMTP_USER:-apikey}:${SENDGRID_API_KEY:-}@${SMTP_HOST:-smtp.sendgrid.net}:${SMTP_PORT:-587}/?use_ssl=false&disable_tls=false&disable_ssl=true
