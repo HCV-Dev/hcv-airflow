@@ -44,7 +44,7 @@ x-airflow-common:
     AIRFLOW__SMTP__SMTP_PASSWORD: ""
     AIRFLOW__SMTP__SMTP_MAIL_FROM: airflow@example.com
     AIRFLOW__EMAIL__FROM_EMAIL: airflow@example.com
-    AIRFLOW_CONN_SMTP_DEFAULT: smtp://mailhog:1025
+    AIRFLOW_CONN_SMTP_DEFAULT: smtp://mailhog:1025/?from_email=airflow%40example.com
 
     # ── HCV connections (local dev defaults) ─────────────────────────────
     AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}

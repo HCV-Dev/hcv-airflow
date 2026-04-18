@@ -69,7 +69,10 @@ x-airflow-common:
     AIRFLOW__EMAIL__FROM_EMAIL: ${SMTP_FROM:-airflow@hcv.co.za}
     # Extras pin STARTTLS on / implicit-SSL off so the hook can't fall back to
     # stale cfg defaults — avoids SSL: WRONG_VERSION_NUMBER on port 587.
-    AIRFLOW_CONN_SMTP_DEFAULT: smtp://${SMTP_USER:-apikey}:${SENDGRID_API_KEY:-}@${SMTP_HOST:-smtp.sendgrid.net}:${SMTP_PORT:-587}/?use_ssl=false&disable_tls=false&disable_ssl=true
+    # `from_email` MUST live here — the SMTP provider reads it only from the
+    # connection's extras, not from [smtp].smtp_mail_from or [email].from_email.
+    # `@` in the from_email is URL-encoded as %40 to survive URI parsing.
+    AIRFLOW_CONN_SMTP_DEFAULT: smtp://${SMTP_USER:-apikey}:${SENDGRID_API_KEY:-}@${SMTP_HOST:-smtp.sendgrid.net}:${SMTP_PORT:-587}/?use_ssl=false&disable_tls=false&disable_ssl=true&from_email=airflow%40hcv.co.za
 
   volumes:
     - airflow-dags:/opt/airflow/dags
