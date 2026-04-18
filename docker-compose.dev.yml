@@ -32,9 +32,12 @@ x-airflow-common:
     AIRFLOW_UID: ${AIRFLOW_UID:-50000}
 
     # ── SMTP → Mailhog ──────────────────────────────────────────────────
+    # The SMTP provider hook requires an `smtp_default` connection — inject it
+    # alongside the [smtp] cfg values so the hook lookup succeeds.
     AIRFLOW__SMTP__SMTP_HOST: mailhog
     AIRFLOW__SMTP__SMTP_PORT: 1025
     AIRFLOW__SMTP__SMTP_MAIL_FROM: airflow@example.com
+    AIRFLOW_CONN_SMTP_DEFAULT: smtp://mailhog:1025
 
     # ── HCV connections (local dev defaults) ─────────────────────────────
     AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}

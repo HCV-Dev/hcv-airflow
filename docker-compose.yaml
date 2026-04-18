@@ -57,6 +57,8 @@ x-airflow-common:
 
     # ── SMTP (email notifications — SendGrid in prod) ───────────────────
     # SendGrid requires SMTP_USER="apikey" (literal) and SMTP_PASSWORD=<API key>.
+    # The SMTP provider hook also requires a matching Airflow connection to exist,
+    # so we inject `smtp_default` from the same values.
     AIRFLOW__SMTP__SMTP_HOST: ${SMTP_HOST:-smtp.sendgrid.net}
     AIRFLOW__SMTP__SMTP_PORT: ${SMTP_PORT:-587}
     AIRFLOW__SMTP__SMTP_STARTTLS: ${SMTP_STARTTLS:-True}
@@ -64,6 +66,7 @@ x-airflow-common:
     AIRFLOW__SMTP__SMTP_USER: ${SMTP_USER:-apikey}
     AIRFLOW__SMTP__SMTP_PASSWORD: ${SENDGRID_API_KEY:-}
     AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_FROM:-airflow@hcv.co.za}
+    AIRFLOW_CONN_SMTP_DEFAULT: smtp://${SMTP_USER:-apikey}:${SENDGRID_API_KEY:-}@${SMTP_HOST:-smtp.sendgrid.net}:${SMTP_PORT:-587}
 
   volumes:
     - airflow-dags:/opt/airflow/dags
