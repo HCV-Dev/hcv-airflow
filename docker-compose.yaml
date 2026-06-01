@@ -29,6 +29,10 @@ x-airflow-common:
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    # Cap tasks-per-worker so memory-heavy syncs don't pile up in one container
+    # and collectively OOM it. Default is 16; these tasks buffer query results
+    # in RAM, so keep this low and scale out with more worker containers instead.
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@${STACK_NAME:-hcv-airflow}-postgres/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@${STACK_NAME:-hcv-airflow}-postgres/airflow
@@ -232,6 +236,10 @@ services:
     environment:
       <<: *airflow-common-env
       DUMB_INIT_SETSID: "0"
+    # Contain runaway tasks: a single sync exceeding this is OOM-killed inside
+    # the worker (clean task failure + retry) rather than taking down the host.
+    # Override per environment via WORKER_MEM_LIMIT.
+    mem_limit: ${WORKER_MEM_LIMIT:-4g}
     restart: always
     depends_on:
       <<: *airflow-common-depends-on

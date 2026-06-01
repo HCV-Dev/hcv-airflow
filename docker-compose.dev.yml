@@ -47,7 +47,7 @@ x-airflow-common:
     AIRFLOW_CONN_SMTP_DEFAULT: smtp://mailhog:1025/?from_email=airflow%40example.com
 
     # ── HCV connections (local dev defaults) ─────────────────────────────
-    AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}
+    # AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}
     AIRFLOW_CONN_HCV_REPORTING_DB: ${HCV_REPORTING_DB_URL:-postgresql://hcv_reporting:hcv_reporting@host.docker.internal:5433/hcv_reporting}
 
     # ── HCV variables for DAGs ───────────────────────────────────────────
