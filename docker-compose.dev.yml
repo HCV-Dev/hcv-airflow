@@ -45,6 +45,9 @@ x-airflow-common:
     AIRFLOW__SMTP__SMTP_MAIL_FROM: airflow@example.com
     AIRFLOW__EMAIL__FROM_EMAIL: airflow@example.com
     AIRFLOW_CONN_SMTP_DEFAULT: smtp://mailhog:1025/?from_email=airflow%40example.com
+    # Real Gmail sender (App Password required) — uncomment + set GMAIL_* in .env
+    # to test live sends instead of MailHog.
+    # AIRFLOW_CONN_SMTP_GMAIL: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${GMAIL_ADDRESS:-}", "password": "${GMAIL_APP_PASSWORD:-}", "extra": {"from_email": "${GMAIL_ADDRESS:-}", "disable_ssl": true, "disable_tls": false}}'
 
     # ── HCV connections (local dev defaults) ─────────────────────────────
     # AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}

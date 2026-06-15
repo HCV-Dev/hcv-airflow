@@ -134,6 +134,8 @@ Deployed per branch on the shared `hcv-net` network.
 | `SMTP_PORT` | `587` | SMTP port |
 | `SMTP_USER` | `apikey` | SMTP username (SendGrid requires the literal `apikey`) |
 | `SMTP_FROM` | `airflow@hcv.co.za` | From address on notification emails |
+| `GMAIL_ADDRESS` | (empty) | Gmail sender + From address for the `smtp_gmail` connection |
+| `GMAIL_APP_PASSWORD` | (empty) | Gmail App Password (16 chars, 2FA required) for `smtp_gmail` |
 
 ### Connections (auto-configured)
 
@@ -141,6 +143,38 @@ Deployed per branch on the shared `hcv-net` network.
 |---------|---------------|---------|
 | `hcv_icu` | `HCV_ICU_CONN_STRING` | ICU SQL Server |
 | `hcv_reporting_db` | `HCV_REPORTING_DB_URL` | Reporting PostgreSQL |
+| `smtp_default` | `SENDGRID_API_KEY` (+ `SMTP_*`) | Default email sender (SendGrid) |
+| `smtp_gmail` | `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` | Alternative email sender (Gmail) |
+
+`HCV_SFTP_CONN_STRING` is an Airflow **SSH** connection. Supply it as a URI,
+e.g. `ssh://user:password@sftp.example.com:22`, or for key auth use the JSON
+form with the key in `extra`:
+`{"conn_type": "ssh", "host": "sftp.example.com", "login": "user", "port": 22, "extra": {"private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}}`.
+Leave it unset to skip transfers (the extract still runs and writes the file locally).
+
+#### Gmail sender (`smtp_gmail`)
+
+`smtp_gmail` is a second email connection with a Gmail account as the sender,
+alongside the SendGrid `smtp_default`. Gmail rejects plain-password SMTP auth, so
+it needs an **App Password**:
+
+1. Enable 2-Step Verification on the Google account.
+2. Create an App Password at <https://myaccount.google.com/apppasswords> (16
+   characters, no spaces).
+3. Add to `.env`:
+   ```bash
+   GMAIL_ADDRESS=you@gmail.com          # also used as the From address
+   GMAIL_APP_PASSWORD=abcdefghijklmnop  # the 16-char App Password, not your login password
+   ```
+
+The connection is defined as JSON (not a URI) in `docker-compose.yaml`, so the
+`@` in the address and any password characters are passed verbatim — avoiding the
+URI-encoding pitfalls that affect `smtp_default`. Port 587 with STARTTLS.
+
+To use it, point a DAG's `EmailOperator`/`SmtpHook` at `conn_id="smtp_gmail"`, or
+copy its value into `AIRFLOW_CONN_SMTP_DEFAULT` to make Gmail the default sender
+for all provider-based emails. (The legacy `send_email` path used by failure
+callbacks reads the `[smtp]` / `AIRFLOW__SMTP__*` config, not this connection.)
 
 ### Custom image
 
