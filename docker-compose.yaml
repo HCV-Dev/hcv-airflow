@@ -12,9 +12,11 @@
 #   DAGS_REPO_URL             — git clone URL for hcv-airflow-dags
 #   DAGS_REPO_BRANCH          — branch to track (e.g. "main", "training")
 #
+#   GMAIL_ADDRESS             — Gmail sender + From address (active email sender)
+#   GMAIL_APP_PASSWORD        — Gmail App Password (16 chars, 2FA required)
+#
 # Optional:
-#   GMAIL_ADDRESS             — Gmail sender address for the `smtp_gmail` connection
-#   GMAIL_APP_PASSWORD        — Gmail App Password (16 chars, 2FA required) for `smtp_gmail`
+#   SENDGRID_API_KEY          — only if reverting email from Gmail back to SendGrid
 #   DAGS_SYNC_INTERVAL        — seconds between git pulls (default: 60)
 #   AIRFLOW_PORT              — host port for the API server (default: 8080)
 #   FERNET_KEY                — encryption key for connections (generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
@@ -61,36 +63,42 @@ x-airflow-common:
     # ── Airflow Variables (available to DAGs via Variable.get()) ─────────
     AIRFLOW_VAR_HCV_ENVIRONMENT: ${STACK_NAME:-hcv-airflow}
 
-    # ── SMTP (email notifications — SendGrid in prod) ───────────────────
-    # SendGrid requires SMTP_USER="apikey" (literal) and SMTP_PASSWORD=<API key>.
-    # The SMTP provider hook also requires a matching Airflow connection to exist,
-    # so we inject `smtp_default` from the same values.
-    AIRFLOW__SMTP__SMTP_HOST: ${SMTP_HOST:-smtp.sendgrid.net}
-    AIRFLOW__SMTP__SMTP_PORT: ${SMTP_PORT:-587}
-    AIRFLOW__SMTP__SMTP_STARTTLS: ${SMTP_STARTTLS:-True}
-    AIRFLOW__SMTP__SMTP_SSL: ${SMTP_SSL:-False}
-    AIRFLOW__SMTP__SMTP_USER: ${SMTP_USER:-apikey}
-    AIRFLOW__SMTP__SMTP_PASSWORD: ${SENDGRID_API_KEY:-}
-    AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_FROM:-airflow@hcv.co.za}
-    AIRFLOW__EMAIL__FROM_EMAIL: ${SMTP_FROM:-airflow@hcv.co.za}
-    # Extras pin STARTTLS on / implicit-SSL off so the hook can't fall back to
-    # stale cfg defaults — avoids SSL: WRONG_VERSION_NUMBER on port 587.
-    # `from_email` MUST live here — the SMTP provider reads it only from the
-    # connection's extras, not from [smtp].smtp_mail_from or [email].from_email.
-    # `@` in the from_email is URL-encoded as %40 to survive URI parsing.
-    AIRFLOW_CONN_SMTP_DEFAULT: smtp://${SMTP_USER:-apikey}:${SENDGRID_API_KEY:-}@${SMTP_HOST:-smtp.sendgrid.net}:${SMTP_PORT:-587}/?use_ssl=false&disable_tls=false&disable_ssl=true&from_email=airflow%40hcv.co.za
-
-    # ── Alternative sender: Gmail (SMTP provider connection `smtp_gmail`) ─
-    # Gmail requires an *App Password* (not the account password) — generate one
-    # at https://myaccount.google.com/apppasswords with 2FA enabled. The sender
-    # (from_email) must be the same Gmail address that owns the App Password.
-    # Defined as JSON (not a URI) so the `@` in the address and any password
-    # characters can't be mangled by URI parsing. Port 587 → STARTTLS on,
-    # implicit SSL off (disable_ssl=true, disable_tls=false), matching smtp_default.
-    # To route a DAG's email through Gmail, point its EmailOperator/SmtpHook at
-    # conn_id "smtp_gmail" (or set this value into AIRFLOW_CONN_SMTP_DEFAULT to
-    # make Gmail the default sender for all provider-based emails).
+    # ── SMTP (email notifications — Gmail, ACTIVE) ──────────────────────
+    # Gmail needs an *App Password* (not the account password) — generate one at
+    # https://myaccount.google.com/apppasswords with 2FA enabled. GMAIL_ADDRESS is
+    # both the SMTP login and the From address; GMAIL_APP_PASSWORD is the 16-char
+    # App Password. Both come from .env. Port 587 / STARTTLS.
+    #
+    # The [smtp] transport vars and the smtp_default connection MUST agree (both
+    # Gmail): the legacy send_email path takes transport (host/port/TLS) from
+    # [smtp] but credentials from the smtp_default connection (email_conn_id).
+    # smtp_default is JSON (not a URI) so the address `@` and password characters
+    # pass through verbatim.
+    AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
+    AIRFLOW__SMTP__SMTP_PORT: 587
+    AIRFLOW__SMTP__SMTP_STARTTLS: "True"
+    AIRFLOW__SMTP__SMTP_SSL: "False"
+    AIRFLOW__SMTP__SMTP_USER: ${GMAIL_ADDRESS:-}
+    AIRFLOW__SMTP__SMTP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+    AIRFLOW__SMTP__SMTP_MAIL_FROM: ${GMAIL_ADDRESS:-}
+    AIRFLOW__EMAIL__FROM_EMAIL: ${GMAIL_ADDRESS:-}
+    AIRFLOW_CONN_SMTP_DEFAULT: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${GMAIL_ADDRESS:-}", "password": "${GMAIL_APP_PASSWORD:-}", "extra": {"from_email": "${GMAIL_ADDRESS:-}", "disable_ssl": true, "disable_tls": false}}'
+    # Explicit Gmail alias (same values as smtp_default above).
     AIRFLOW_CONN_SMTP_GMAIL: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${GMAIL_ADDRESS:-}", "password": "${GMAIL_APP_PASSWORD:-}", "extra": {"from_email": "${GMAIL_ADDRESS:-}", "disable_ssl": true, "disable_tls": false}}'
+
+    # ── SMTP (SendGrid — DISABLED) ──────────────────────────────────────
+    # To restore SendGrid: comment out the Gmail block above and uncomment this.
+    # SendGrid requires SMTP_USER="apikey" (literal) and SMTP_PASSWORD=<API key>.
+    # The `from_email` in the connection URI is URL-encoded (%40) to survive parsing.
+    # AIRFLOW__SMTP__SMTP_HOST: ${SMTP_HOST:-smtp.sendgrid.net}
+    # AIRFLOW__SMTP__SMTP_PORT: ${SMTP_PORT:-587}
+    # AIRFLOW__SMTP__SMTP_STARTTLS: ${SMTP_STARTTLS:-True}
+    # AIRFLOW__SMTP__SMTP_SSL: ${SMTP_SSL:-False}
+    # AIRFLOW__SMTP__SMTP_USER: ${SMTP_USER:-apikey}
+    # AIRFLOW__SMTP__SMTP_PASSWORD: ${SENDGRID_API_KEY:-}
+    # AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_FROM:-airflow@hcv.co.za}
+    # AIRFLOW__EMAIL__FROM_EMAIL: ${SMTP_FROM:-airflow@hcv.co.za}
+    # AIRFLOW_CONN_SMTP_DEFAULT: smtp://${SMTP_USER:-apikey}:${SENDGRID_API_KEY:-}@${SMTP_HOST:-smtp.sendgrid.net}:${SMTP_PORT:-587}/?use_ssl=false&disable_tls=false&disable_ssl=true&from_email=airflow%40hcv.co.za
 
   volumes:
     - airflow-dags:/opt/airflow/dags

@@ -120,7 +120,8 @@ Deployed per branch on the shared `hcv-net` network.
 | `HCV_ICU_CONN_STRING` | ICU SQL Server ODBC connection string |
 | `HCV_REPORTING_DB_URL` | Reporting PostgreSQL connection string |
 | `AIRFLOW_ADMIN_PASSWORD` | Admin UI password |
-| `SENDGRID_API_KEY` | SendGrid API key for email notifications |
+| `GMAIL_ADDRESS` | Gmail sender + From address (active email sender) |
+| `GMAIL_APP_PASSWORD` | Gmail App Password (16 chars, 2FA required) |
 
 ### Optional environment variables
 
@@ -130,12 +131,11 @@ Deployed per branch on the shared `hcv-net` network.
 | `AIRFLOW_IMAGE_NAME` | `ghcr.io/hcv-dev/hcv-airflow:latest` | Custom Airflow image |
 | `DAGS_SYNC_INTERVAL` | `60` | Seconds between git pulls |
 | `FERNET_KEY` | (empty) | Encryption key for stored connections |
-| `SMTP_HOST` | `smtp.sendgrid.net` | SMTP server for notifications |
-| `SMTP_PORT` | `587` | SMTP port |
-| `SMTP_USER` | `apikey` | SMTP username (SendGrid requires the literal `apikey`) |
-| `SMTP_FROM` | `airflow@hcv.co.za` | From address on notification emails |
-| `GMAIL_ADDRESS` | (empty) | Gmail sender + From address for the `smtp_gmail` connection |
-| `GMAIL_APP_PASSWORD` | (empty) | Gmail App Password (16 chars, 2FA required) for `smtp_gmail` |
+| `SENDGRID_API_KEY` | (empty) | SendGrid API key — only if reverting email to SendGrid |
+| `SMTP_HOST` | `smtp.sendgrid.net` | SMTP server (only used by the disabled SendGrid block) |
+| `SMTP_PORT` | `587` | SMTP port (SendGrid block) |
+| `SMTP_USER` | `apikey` | SMTP username (SendGrid block; literal `apikey`) |
+| `SMTP_FROM` | `airflow@hcv.co.za` | From address (SendGrid block) |
 
 ### Connections (auto-configured)
 
@@ -143,8 +143,9 @@ Deployed per branch on the shared `hcv-net` network.
 |---------|---------------|---------|
 | `hcv_icu` | `HCV_ICU_CONN_STRING` | ICU SQL Server |
 | `hcv_reporting_db` | `HCV_REPORTING_DB_URL` | Reporting PostgreSQL |
-| `smtp_default` | `SENDGRID_API_KEY` (+ `SMTP_*`) | Default email sender (SendGrid) |
-| `smtp_gmail` | `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` | Alternative email sender (Gmail) |
+| `hcv_sftp` | `HCV_SFTP_CONN_STRING` | SFTP destination for monthly/daily extracts |
+| `smtp_default` | `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` | Default email sender (Gmail) |
+| `smtp_gmail` | `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` | Explicit Gmail alias (same as `smtp_default`) |
 
 `HCV_SFTP_CONN_STRING` is an Airflow **SSH** connection. Supply it as a URI,
 e.g. `ssh://user:password@sftp.example.com:22`, or for key auth use the JSON
@@ -152,11 +153,13 @@ form with the key in `extra`:
 `{"conn_type": "ssh", "host": "sftp.example.com", "login": "user", "port": 22, "extra": {"private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}}`.
 Leave it unset to skip transfers (the extract still runs and writes the file locally).
 
-#### Gmail sender (`smtp_gmail`)
+#### Email sender (Gmail — active)
 
-`smtp_gmail` is a second email connection with a Gmail account as the sender,
-alongside the SendGrid `smtp_default`. Gmail rejects plain-password SMTP auth, so
-it needs an **App Password**:
+Email notifications send through **Gmail** by default: the `[smtp]` transport, the
+`smtp_default` connection, and the `smtp_gmail` alias are all configured for Gmail.
+SendGrid config is kept commented out in `docker-compose.yaml` and `airflow.cfg`
+for easy rollback. Gmail rejects plain-password SMTP auth, so it needs an
+**App Password**:
 
 1. Enable 2-Step Verification on the Google account.
 2. Create an App Password at <https://myaccount.google.com/apppasswords> (16
@@ -167,14 +170,21 @@ it needs an **App Password**:
    GMAIL_APP_PASSWORD=abcdefghijklmnop  # the 16-char App Password, not your login password
    ```
 
-The connection is defined as JSON (not a URI) in `docker-compose.yaml`, so the
-`@` in the address and any password characters are passed verbatim — avoiding the
-URI-encoding pitfalls that affect `smtp_default`. Port 587 with STARTTLS.
+The connections are defined as JSON (not a URI) in `docker-compose.yaml`, so the
+`@` in the address and any password characters pass through verbatim — avoiding the
+URI-encoding pitfalls that previously affected the SendGrid `smtp_default` URI.
+Port 587 with STARTTLS.
 
-To use it, point a DAG's `EmailOperator`/`SmtpHook` at `conn_id="smtp_gmail"`, or
-copy its value into `AIRFLOW_CONN_SMTP_DEFAULT` to make Gmail the default sender
-for all provider-based emails. (The legacy `send_email` path used by failure
-callbacks reads the `[smtp]` / `AIRFLOW__SMTP__*` config, not this connection.)
+No DAG changes are needed: `EmailOperator`s already use `smtp_default` (now Gmail),
+and the legacy `send_email` path (failure callbacks) takes its transport from the
+Gmail `[smtp]` / `AIRFLOW__SMTP__*` config and its credentials from the Gmail
+`smtp_default` connection. Because both paths now point at Gmail consistently, all
+notifications send from the Gmail account.
+
+**To revert to SendGrid:** in `docker-compose.yaml`, comment the Gmail SMTP block
+and uncomment the SendGrid block; in `config/airflow.cfg`, restore the commented
+`smtp_host`/`smtp_user` SendGrid lines. Then set `SENDGRID_API_KEY` in `.env` and
+recreate the stack.
 
 ### Custom image
 
