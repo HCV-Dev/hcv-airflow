@@ -2,7 +2,7 @@
 #
 # Extends the official Airflow image with:
 #   - ODBC Driver 18 for SQL Server (pyodbc → ICU)
-#   - pandas, sqlalchemy, psycopg2 (data sync scripts)
+#   - pandas, openpyxl, sqlalchemy, psycopg2 (data sync + Excel extracts)
 #
 FROM apache/airflow:3.1.1
 
@@ -25,6 +25,7 @@ USER airflow
 # Install Python packages for sync scripts
 RUN pip install --no-cache-dir \
     pandas \
+    openpyxl \
     pyodbc \
     psycopg2-binary \
     sqlalchemy>=2.0 \
