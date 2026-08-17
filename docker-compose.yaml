@@ -18,8 +18,11 @@
 #
 #   HCV_FINANCE_NOTIFY_EMAIL  — recipient(s) for finance reports (monthly extract)
 #   HCV_CLAIMS_NOTIFY_EMAIL   — recipient(s) for claims reports (claim-capture check)
+#   HCV_FAILURE_NOTIFY_EMAIL  — recipient(s) for task-failure callbacks (all DAGs)
 #
 # Optional:
+#   HCV_VALUE_DISCREPANCY_EMAIL — recipient(s) for compare_vehicle_values
+#   HCV_VALUE_MARGIN_PCT      — value-discrepancy threshold percent (default 10)
 #   HCV_REPORTS_SHARE_PATH    — host path of the mounted SMB reports share
 #                               (default /mnt/hcv-reports); mounted read-write at
 #                               /mnt/reports in every Airflow container
@@ -80,8 +83,14 @@ x-airflow-common:
     # Report recipients, per business area. Comma-separate multiple addresses.
     #   finance → extract_monthly (Movement extract summary)
     #   claims  → check_claim_capture (capture check + month-end location audit)
+    #   failure → on_failure_callback in every DAG
     AIRFLOW_VAR_HCV_FINANCE_NOTIFY_EMAIL: ${HCV_FINANCE_NOTIFY_EMAIL:-reporting@hcv.co.za}
     AIRFLOW_VAR_HCV_CLAIMS_NOTIFY_EMAIL: ${HCV_CLAIMS_NOTIFY_EMAIL:-reporting@hcv.co.za}
+    AIRFLOW_VAR_HCV_FAILURE_NOTIFY_EMAIL: ${HCV_FAILURE_NOTIFY_EMAIL:-reporting@hcv.co.za}
+
+    # ── Vehicle value comparison (compare_vehicle_values) ───────────────
+    AIRFLOW_VAR_HCV_VALUE_DISCREPANCY_EMAIL: ${HCV_VALUE_DISCREPANCY_EMAIL:-reporting@hcv.co.za}
+    AIRFLOW_VAR_HCV_VALUE_MARGIN_PCT: ${HCV_VALUE_MARGIN_PCT:-10}
 
     # ── SMB reports share (bind-mounted at /mnt/reports, see volumes) ────
     AIRFLOW_VAR_HCV_MONTHLY_EXTRACT_SHARE_DIR: ${HCV_MONTHLY_EXTRACT_SHARE_DIR:-/mnt/reports/monthly}

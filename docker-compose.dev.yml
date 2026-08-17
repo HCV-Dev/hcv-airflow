@@ -60,6 +60,9 @@ x-airflow-common:
     # Report recipients per business area — everything lands in MailHog locally.
     AIRFLOW_VAR_HCV_FINANCE_NOTIFY_EMAIL: ${HCV_FINANCE_NOTIFY_EMAIL:-finance-dev@example.com}
     AIRFLOW_VAR_HCV_CLAIMS_NOTIFY_EMAIL: ${HCV_CLAIMS_NOTIFY_EMAIL:-claims-dev@example.com}
+    AIRFLOW_VAR_HCV_FAILURE_NOTIFY_EMAIL: ${HCV_FAILURE_NOTIFY_EMAIL:-failures-dev@example.com}
+    AIRFLOW_VAR_HCV_VALUE_DISCREPANCY_EMAIL: ${HCV_VALUE_DISCREPANCY_EMAIL:-values-dev@example.com}
+    AIRFLOW_VAR_HCV_VALUE_MARGIN_PCT: ${HCV_VALUE_MARGIN_PCT:-10}
     # Stand-in for the SMB share (./share on the host). Marker check is off in
     # dev — an empty value means "skip", since there is no real mount to prove.
     AIRFLOW_VAR_HCV_MONTHLY_EXTRACT_SHARE_DIR: ${HCV_MONTHLY_EXTRACT_SHARE_DIR:-/mnt/reports/monthly}

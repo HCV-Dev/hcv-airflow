@@ -125,6 +125,7 @@ Deployed per branch on the shared `hcv-net` network.
 | `GMAIL_APP_PASSWORD` | Gmail App Password (16 chars, 2FA required) |
 | `HCV_FINANCE_NOTIFY_EMAIL` | Finance report recipient(s) — comma-separated |
 | `HCV_CLAIMS_NOTIFY_EMAIL` | Claims report recipient(s) — comma-separated |
+| `HCV_FAILURE_NOTIFY_EMAIL` | Task-failure recipient(s) — comma-separated |
 
 ### Optional environment variables
 
@@ -136,6 +137,8 @@ Deployed per branch on the shared `hcv-net` network.
 | `HCV_REPORTS_SHARE_PATH` | `/mnt/hcv-reports` | Host path of the SMB reports share, bind-mounted at `/mnt/reports` |
 | `HCV_MONTHLY_EXTRACT_SHARE_DIR` | `/mnt/reports/monthly` | In-container directory the monthly workbook is written to |
 | `HCV_SHARE_MARKER_FILE` | `.hcv-share-ok` | File that exists only on the real share, proving the mount is live |
+| `HCV_VALUE_DISCREPANCY_EMAIL` | `reporting@hcv.co.za` | Recipient(s) for `compare_vehicle_values` |
+| `HCV_VALUE_MARGIN_PCT` | `10` | Value-discrepancy threshold, percent |
 | `FERNET_KEY` | (empty) | Encryption key for stored connections |
 | `SENDGRID_API_KEY` | (empty) | SendGrid API key — only if reverting email to SendGrid |
 | `SMTP_HOST` | `smtp.sendgrid.net` | SMTP server (only used by the disabled SendGrid block) |
@@ -171,10 +174,17 @@ Admin → Variables, so the stack's env vars always win):
 | `HCV_CLAIMS_NOTIFY_EMAIL` | `HCV_CLAIMS_NOTIFY_EMAIL` | `check_claim_capture` — capture check + month-end location audit |
 | `HCV_FAILURE_NOTIFY_EMAIL` | `HCV_FAILURE_NOTIFY_EMAIL` | task-failure callbacks in all DAGs |
 
-Each accepts one address or a comma-separated list. Both default to
+Each accepts one address or a comma-separated list. All three default to
 `reporting@hcv.co.za` if unset, so a fresh stack still delivers. Do not set them
 to an empty string in Portainer — for `HCV_CLAIMS_NOTIFY_EMAIL` the DAG template
 would then resolve to no recipient at all.
+
+Airflow only reads env vars prefixed `AIRFLOW_VAR_`, so setting a bare
+`HCV_*` variable in the stack env has no effect on its own — the mapping in
+`docker-compose.yaml` is what exposes it. A DAG silently falling back to its
+default (or a `Variable not found` 404 in the worker log) means the
+`AIRFLOW_VAR_*` line is missing, or the stack was restarted rather than
+recreated after the compose file changed.
 
 `HCV_CLAIMS_NOTIFY_EMAIL` replaces the old `HCV_CLAIMS_MANAGEMENT_NOTIFY`
 Variable, which the DAG no longer reads — delete it from Admin → Variables if it
