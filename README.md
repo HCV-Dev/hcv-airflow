@@ -59,8 +59,8 @@ Tasks use `@task` decorators and retrieve connection details from Airflow connec
 ## Local development
 
 ```bash
-# 1. Create required directories
-mkdir -p ./logs ./plugins ./config
+# 1. Create required directories (./share stands in for the SMB reports share)
+mkdir -p ./logs ./plugins ./config ./share
 
 # 2. Ensure the DAGs repo is checked out alongside this repo
 ls ../hcv-airflow-dags/  # should exist
@@ -119,9 +119,12 @@ Deployed per branch on the shared `hcv-net` network.
 | `DAGS_REPO_BRANCH` | Branch to track (`main` or `training`) |
 | `HCV_ICU_CONN_STRING` | ICU SQL Server ODBC connection string |
 | `HCV_REPORTING_DB_URL` | Reporting PostgreSQL connection string |
+| `HCV_SFTP_CONN_STRING` | SFTP destination for extracts (SSH connection URI) |
 | `AIRFLOW_ADMIN_PASSWORD` | Admin UI password |
 | `GMAIL_ADDRESS` | Gmail sender + From address (active email sender) |
 | `GMAIL_APP_PASSWORD` | Gmail App Password (16 chars, 2FA required) |
+| `HCV_FINANCE_NOTIFY_EMAIL` | Finance report recipient(s) — comma-separated |
+| `HCV_CLAIMS_NOTIFY_EMAIL` | Claims report recipient(s) — comma-separated |
 
 ### Optional environment variables
 
@@ -130,6 +133,9 @@ Deployed per branch on the shared `hcv-net` network.
 | `AIRFLOW_PORT` | `8080` | Host port for the Airflow UI |
 | `AIRFLOW_IMAGE_NAME` | `ghcr.io/hcv-dev/hcv-airflow:latest` | Custom Airflow image |
 | `DAGS_SYNC_INTERVAL` | `60` | Seconds between git pulls |
+| `HCV_REPORTS_SHARE_PATH` | `/mnt/hcv-reports` | Host path of the SMB reports share, bind-mounted at `/mnt/reports` |
+| `HCV_MONTHLY_EXTRACT_SHARE_DIR` | `/mnt/reports/monthly` | In-container directory the monthly workbook is written to |
+| `HCV_SHARE_MARKER_FILE` | `.hcv-share-ok` | File that exists only on the real share, proving the mount is live |
 | `FERNET_KEY` | (empty) | Encryption key for stored connections |
 | `SENDGRID_API_KEY` | (empty) | SendGrid API key — only if reverting email to SendGrid |
 | `SMTP_HOST` | `smtp.sendgrid.net` | SMTP server (only used by the disabled SendGrid block) |
@@ -152,6 +158,55 @@ e.g. `ssh://user:password@sftp.example.com:22`, or for key auth use the JSON
 form with the key in `extra`:
 `{"conn_type": "ssh", "host": "sftp.example.com", "login": "user", "port": 22, "extra": {"private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}}`.
 Leave it unset to skip transfers (the extract still runs and writes the file locally).
+
+### Notification recipients
+
+Report recipients are set per business area in the deployment and exposed to DAGs
+as Airflow Variables (`AIRFLOW_VAR_*` values take precedence over anything in
+Admin → Variables, so the stack's env vars always win):
+
+| Env var | Airflow Variable | Used by |
+|---------|-----------------|---------|
+| `HCV_FINANCE_NOTIFY_EMAIL` | `HCV_FINANCE_NOTIFY_EMAIL` | `extract_monthly` — monthly Movement extract summary |
+| `HCV_CLAIMS_NOTIFY_EMAIL` | `HCV_CLAIMS_NOTIFY_EMAIL` | `check_claim_capture` — capture check + month-end location audit |
+| `HCV_FAILURE_NOTIFY_EMAIL` | `HCV_FAILURE_NOTIFY_EMAIL` | task-failure callbacks in all DAGs |
+
+Each accepts one address or a comma-separated list. Both default to
+`reporting@hcv.co.za` if unset, so a fresh stack still delivers. Do not set them
+to an empty string in Portainer — for `HCV_CLAIMS_NOTIFY_EMAIL` the DAG template
+would then resolve to no recipient at all.
+
+`HCV_CLAIMS_NOTIFY_EMAIL` replaces the old `HCV_CLAIMS_MANAGEMENT_NOTIFY`
+Variable, which the DAG no longer reads — delete it from Admin → Variables if it
+is still there, to avoid the impression that it controls anything.
+
+### Reports share (SMB/CIFS)
+
+`extract_monthly` delivers its workbook by copying it onto a mounted share
+rather than over SFTP. The share is mounted **on the host** and bind-mounted
+into every Airflow container at `/mnt/reports`:
+
+```
+${HCV_REPORTS_SHARE_PATH:-/mnt/hcv-reports}:/mnt/reports
+```
+
+Mount it on the host with a uid matching `AIRFLOW_UID` (the containers run as
+`50000:0`), e.g. in `/etc/fstab`:
+
+```
+//fileserver/Reports /mnt/hcv-reports cifs credentials=/etc/cifs-hcv-reports,uid=50000,gid=0,file_mode=0664,dir_mode=0775,vers=3.0,_netdev,nofail 0 0
+```
+
+`hcv/extract/share.py` in the DAGs repo refuses to write when the target sits on
+the container root filesystem, and copies via a hidden `.partial` file that is
+renamed into place, so a Windows-side poller never picks up a half-written
+workbook. One gap the device check cannot see: with `nofail`, a dead CIFS mount
+leaves an ordinary empty host directory that Docker still binds happily. Put a
+`.hcv-share-ok` file on the real share so `HCV_SHARE_MARKER_FILE` can catch that
+case and fail the task.
+
+In local dev the share is stood in for by `./share` (gitignored, mounted at the
+same path) and `HCV_SHARE_MARKER_FILE` is empty, which skips the marker check.
 
 #### Email sender (Gmail — active)
 

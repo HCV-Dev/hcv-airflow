@@ -8,6 +8,7 @@
 #   STACK_NAME                — unique prefix, e.g. "hcv-airflow-prod", "hcv-airflow-training"
 #   HCV_ICU_CONN_STRING       — ICU SQL Server ODBC connection string
 #   HCV_REPORTING_DB_URL      — reporting PostgreSQL connection string
+#   HCV_SFTP_CONN_STRING      — SFTP destination for extracts (SSH connection URI)
 #   AIRFLOW_ADMIN_PASSWORD    — admin UI password
 #   DAGS_REPO_URL             — git clone URL for hcv-airflow-dags
 #   DAGS_REPO_BRANCH          — branch to track (e.g. "main", "training")
@@ -15,7 +16,15 @@
 #   GMAIL_ADDRESS             — Gmail sender + From address (active email sender)
 #   GMAIL_APP_PASSWORD        — Gmail App Password (16 chars, 2FA required)
 #
+#   HCV_FINANCE_NOTIFY_EMAIL  — recipient(s) for finance reports (monthly extract)
+#   HCV_CLAIMS_NOTIFY_EMAIL   — recipient(s) for claims reports (claim-capture check)
+#
 # Optional:
+#   HCV_REPORTS_SHARE_PATH    — host path of the mounted SMB reports share
+#                               (default /mnt/hcv-reports); mounted read-write at
+#                               /mnt/reports in every Airflow container
+#   HCV_SHARE_MARKER_FILE     — filename that exists only on the real share, used
+#                               to prove the CIFS mount is live before writing
 #   SENDGRID_API_KEY          — only if reverting email from Gmail back to SendGrid
 #   DAGS_SYNC_INTERVAL        — seconds between git pulls (default: 60)
 #   AIRFLOW_PORT              — host port for the API server (default: 8080)
@@ -59,9 +68,24 @@ x-airflow-common:
     AIRFLOW_CONN_HCV_REPORTING_DB: ${HCV_REPORTING_DB_URL:-}
     # ICU SQL Server (ODBC string stored as generic connection description)
     AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}
+    # SFTP destination for extracts (SSH connection — URI or JSON description)
+    AIRFLOW_CONN_HCV_SFTP: ${HCV_SFTP_CONN_STRING:-}
 
     # ── Airflow Variables (available to DAGs via Variable.get()) ─────────
+    # AIRFLOW_VAR_* takes precedence over anything set in Admin → Variables,
+    # so these values win over the UI. Never set one to an empty string: the
+    # DAG then reads "" instead of falling back to its own default.
     AIRFLOW_VAR_HCV_ENVIRONMENT: ${STACK_NAME:-hcv-airflow}
+
+    # Report recipients, per business area. Comma-separate multiple addresses.
+    #   finance → extract_monthly (Movement extract summary)
+    #   claims  → check_claim_capture (capture check + month-end location audit)
+    AIRFLOW_VAR_HCV_FINANCE_NOTIFY_EMAIL: ${HCV_FINANCE_NOTIFY_EMAIL:-reporting@hcv.co.za}
+    AIRFLOW_VAR_HCV_CLAIMS_NOTIFY_EMAIL: ${HCV_CLAIMS_NOTIFY_EMAIL:-reporting@hcv.co.za}
+
+    # ── SMB reports share (bind-mounted at /mnt/reports, see volumes) ────
+    AIRFLOW_VAR_HCV_MONTHLY_EXTRACT_SHARE_DIR: ${HCV_MONTHLY_EXTRACT_SHARE_DIR:-/mnt/reports/monthly}
+    AIRFLOW_VAR_HCV_SHARE_MARKER_FILE: ${HCV_SHARE_MARKER_FILE:-.hcv-share-ok}
 
     # ── SMTP (email notifications — Gmail, ACTIVE) ──────────────────────
     # Gmail needs an *App Password* (not the account password) — generate one at
@@ -105,6 +129,15 @@ x-airflow-common:
     - airflow-logs:/opt/airflow/logs
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
+    # SMB reports share — mounted on the host (CIFS), bind-mounted here so
+    # extract DAGs can deliver workbooks with a plain file copy. Mount the
+    # share on the host with uid matching AIRFLOW_UID, e.g. in /etc/fstab:
+    #   //fileserver/Reports /mnt/hcv-reports cifs \
+    #     credentials=/etc/cifs-hcv-reports,uid=50000,gid=0,\
+    #     file_mode=0664,dir_mode=0775,vers=3.0,_netdev,nofail 0 0
+    # If the CIFS mount is down, Docker still binds the (empty) host directory —
+    # HCV_SHARE_MARKER_FILE is what lets the DAG detect that and fail.
+    - ${HCV_REPORTS_SHARE_PATH:-/mnt/hcv-reports}:/mnt/reports
   user: "${AIRFLOW_UID:-50000}:0"
   networks:
     - hcv-net

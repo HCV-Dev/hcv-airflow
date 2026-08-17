@@ -1,2 +1,6 @@
 logs/
 .env
+
+# Local stand-in for the SMB reports share (dev compose mounts it at /mnt/reports)
+share/
+!share/.gitkeep

@@ -50,17 +50,27 @@ x-airflow-common:
     # AIRFLOW_CONN_SMTP_GMAIL: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${GMAIL_ADDRESS:-}", "password": "${GMAIL_APP_PASSWORD:-}", "extra": {"from_email": "${GMAIL_ADDRESS:-}", "disable_ssl": true, "disable_tls": false}}'
 
     # ── HCV connections (local dev defaults) ─────────────────────────────
-    # AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}
+    AIRFLOW_CONN_HCV_ICU: ${HCV_ICU_CONN_STRING:-}
     AIRFLOW_CONN_HCV_REPORTING_DB: ${HCV_REPORTING_DB_URL:-postgresql://hcv_reporting:hcv_reporting@host.docker.internal:5433/hcv_reporting}
+    # SFTP destination for extracts (set HCV_SFTP_CONN_STRING in .env to test transfers)
+    AIRFLOW_CONN_HCV_SFTP: ${HCV_SFTP_CONN_STRING:-}
 
     # ── HCV variables for DAGs ───────────────────────────────────────────
     AIRFLOW_VAR_HCV_ENVIRONMENT: hcv-dev
+    # Report recipients per business area — everything lands in MailHog locally.
+    AIRFLOW_VAR_HCV_FINANCE_NOTIFY_EMAIL: ${HCV_FINANCE_NOTIFY_EMAIL:-finance-dev@example.com}
+    AIRFLOW_VAR_HCV_CLAIMS_NOTIFY_EMAIL: ${HCV_CLAIMS_NOTIFY_EMAIL:-claims-dev@example.com}
+    # Stand-in for the SMB share (./share on the host). Marker check is off in
+    # dev — an empty value means "skip", since there is no real mount to prove.
+    AIRFLOW_VAR_HCV_MONTHLY_EXTRACT_SHARE_DIR: ${HCV_MONTHLY_EXTRACT_SHARE_DIR:-/mnt/reports/monthly}
+    AIRFLOW_VAR_HCV_SHARE_MARKER_FILE: ${HCV_SHARE_MARKER_FILE:-}
 
   volumes:
     - ${DAGS_REPO_PATH:-../hcv-airflow-dags}:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
+    - ${HCV_REPORTS_SHARE_PATH:-./share}:/mnt/reports
   user: "${AIRFLOW_UID:-50000}:0"
   extra_hosts:
     - "host.docker.internal:host-gateway"
