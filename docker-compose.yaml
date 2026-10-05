@@ -23,6 +23,14 @@
 # Optional:
 #   HCV_VALUE_DISCREPANCY_EMAIL — recipient(s) for compare_vehicle_values
 #   HCV_VALUE_MARGIN_PCT      — value-discrepancy threshold percent (default 10)
+#   HCV_DEBIT_ORDER_NOTIFY    - recipient(s) of the rejected debit order send report
+#   HCV_DEBIT_ORDER_START_DATE - YYYY-MM-DD go-live date for debit order alerts.
+#                               Nothing dated earlier is ever messaged.
+#   HCV_PORTAL_API_URL        - broker portal API base URL. WhatsApp sends go
+#                               through its /internal/wa/send-template
+#   HCV_PORTAL_WA_TOKEN       - the portal's WA_SERVICE_TOKEN (keep it secret)
+#   HCV_WHATSAPP_MOCK         - "false" to send for real (default "true")
+#   HCV_DEBIT_ORDER_TEMPLATE  - portal template name (default debit_order_rejected)
 #   HCV_REPORTS_SHARE_PATH    — host path of the mounted SMB reports share
 #                               (default /mnt/hcv-reports); mounted read-write at
 #                               /mnt/reports in every Airflow container
@@ -91,6 +99,25 @@ x-airflow-common:
     # ── Vehicle value comparison (compare_vehicle_values) ───────────────
     AIRFLOW_VAR_HCV_VALUE_DISCREPANCY_EMAIL: ${HCV_VALUE_DISCREPANCY_EMAIL:-reporting@hcv.co.za}
     AIRFLOW_VAR_HCV_VALUE_MARGIN_PCT: ${HCV_VALUE_MARGIN_PCT:-10}
+
+    # ── Rejected debit order alerts (check_rejected_debit_orders) ───────
+    # Set HCV_DEBIT_ORDER_START_DATE to the go-live date before switching
+    # HCV_WHATSAPP_MOCK off. The DAG reads an empty start date as "no floor",
+    # so it is the one Variable here that may safely default to "".
+    AIRFLOW_VAR_HCV_DEBIT_ORDER_NOTIFY: ${HCV_DEBIT_ORDER_NOTIFY:-reporting@hcv.co.za}
+    AIRFLOW_VAR_HCV_DEBIT_ORDER_LOOKBACK_DAYS: ${HCV_DEBIT_ORDER_LOOKBACK_DAYS:-7}
+    AIRFLOW_VAR_HCV_DEBIT_ORDER_START_DATE: ${HCV_DEBIT_ORDER_START_DATE:-}
+    AIRFLOW_VAR_HCV_DEBIT_ORDER_TEMPLATE: ${HCV_DEBIT_ORDER_TEMPLATE:-debit_order_rejected}
+
+    # ── WhatsApp via the broker portal API ──────────────────────────────
+    # Airflow holds no Meta credentials. It calls the portal, which holds the
+    # token, checks opt-outs and sends each idempotency key at most once. URL
+    # and token default to "" (read as unset), and live mode with either unset
+    # fails the task rather than mocking. "token" in the name makes Airflow
+    # mask the value in the UI and in task logs.
+    AIRFLOW_VAR_HCV_WHATSAPP_MOCK: ${HCV_WHATSAPP_MOCK:-true}
+    AIRFLOW_VAR_HCV_PORTAL_API_URL: ${HCV_PORTAL_API_URL:-}
+    AIRFLOW_VAR_HCV_PORTAL_WA_TOKEN: ${HCV_PORTAL_WA_TOKEN:-}
 
     # ── SMB reports share (bind-mounted at /mnt/reports, see volumes) ────
     AIRFLOW_VAR_HCV_MONTHLY_EXTRACT_SHARE_DIR: ${HCV_MONTHLY_EXTRACT_SHARE_DIR:-/mnt/reports/monthly}

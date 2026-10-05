@@ -173,6 +173,13 @@ Admin → Variables, so the stack's env vars always win):
 | `HCV_FINANCE_NOTIFY_EMAIL` | `HCV_FINANCE_NOTIFY_EMAIL` | `extract_monthly` — monthly Movement extract summary |
 | `HCV_CLAIMS_NOTIFY_EMAIL` | `HCV_CLAIMS_NOTIFY_EMAIL` | `check_claim_capture` — capture check + month-end location audit |
 | `HCV_FAILURE_NOTIFY_EMAIL` | `HCV_FAILURE_NOTIFY_EMAIL` | task-failure callbacks in all DAGs |
+| `HCV_DEBIT_ORDER_NOTIFY` | `HCV_DEBIT_ORDER_NOTIFY` | `check_rejected_debit_orders` - report of every WhatsApp send |
+| `HCV_DEBIT_ORDER_LOOKBACK_DAYS` | `HCV_DEBIT_ORDER_LOOKBACK_DAYS` | `check_rejected_debit_orders` - extra days read before the previous business day (default 7) |
+| `HCV_DEBIT_ORDER_START_DATE` | `HCV_DEBIT_ORDER_START_DATE` | `check_rejected_debit_orders` - go-live date, `YYYY-MM-DD`. Set it before turning off WhatsApp mock mode |
+| `HCV_DEBIT_ORDER_TEMPLATE` | `HCV_DEBIT_ORDER_TEMPLATE` | `check_rejected_debit_orders` - approved portal template (default `debit_order_rejected`) |
+| `HCV_WHATSAPP_MOCK` | `HCV_WHATSAPP_MOCK` | `check_rejected_debit_orders` - `false` sends for real (default `true`) |
+| `HCV_PORTAL_API_URL` | `HCV_PORTAL_API_URL` | WhatsApp sends - broker portal API base URL |
+| `HCV_PORTAL_WA_TOKEN` | `HCV_PORTAL_WA_TOKEN` | WhatsApp sends - the portal's `WA_SERVICE_TOKEN`. Secret |
 
 Each accepts one address or a comma-separated list. All three default to
 `reporting@hcv.co.za` if unset, so a fresh stack still delivers. Do not set them
@@ -217,6 +224,61 @@ case and fail the task.
 
 In local dev the share is stood in for by `./share` (gitignored, mounted at the
 same path) and `HCV_SHARE_MARKER_FILE` is empty, which skips the marker check.
+
+##### Mounting the share on the host
+
+Run as root **on the Docker host**. `\\<server>\folder` becomes `//<server>/folder`.
+
+1. Install the client: `apt-get install -y cifs-utils` (Debian/Ubuntu) or
+   `dnf install -y cifs-utils` (RHEL/Rocky).
+2. Create `/etc/cifs-hcv-reports` with `username=` / `password=` / `domain=`
+   lines, then `chmod 600`. No quotes around the password. This keeps the
+   password out of world-readable `/etc/fstab`.
+3. Test by hand before editing fstab:
+
+   ```bash
+   mkdir -p /mnt/hcv-reports
+   mount -t cifs '//<server>/<folder>' /mnt/hcv-reports \
+     -o credentials=/etc/cifs-hcv-reports,uid=50000,gid=0,file_mode=0664,dir_mode=0775,vers=3.1.1
+   ```
+
+   `uid=50000` must match `AIRFLOW_UID`, or the task clears the marker check and
+   fails the writability check instead. On `mount error(112): Host is down`, the
+   server wants an older dialect — try `vers=3.0`, then `vers=2.1`.
+4. Verify: `findmnt /mnt/hcv-reports`, `stat -f -c %T /mnt/hcv-reports` (expect
+   `smb2`, not `ext2/ext3`), and `ls -la /mnt/hcv-reports/.hcv-share-ok`
+   (expect owner `50000`).
+5. Persist it in `/etc/fstab` using the line above, then
+   `systemctl daemon-reload && umount /mnt/hcv-reports && mount -a`.
+6. Order Docker after the mount, so a reboot cannot start containers against the
+   not-yet-mounted directory:
+
+   ```bash
+   mkdir -p /etc/systemd/system/docker.service.d
+   cat > /etc/systemd/system/docker.service.d/10-hcv-reports-mount.conf <<'EOF'
+   [Unit]
+   After=mnt-hcv\x2dreports.mount
+   Wants=mnt-hcv\x2dreports.mount
+   EOF
+   systemctl daemon-reload
+   ```
+
+   The unit name comes from `systemd-escape -p --suffix=mount /mnt/hcv-reports`.
+   Use `Wants`/`After`, not `RequiresMountsFor=` — the latter implies `Requires=`,
+   so a file server down at boot would stop Docker starting at all. With `Wants`,
+   the stack comes up and only the extract task fails, which the marker check
+   already reports clearly.
+7. Recreate the stack (**recreate, not restart** — a running container holds its
+   bind to the directory as it was, so a later host mount stays invisible to it).
+8. Confirm from inside the container:
+
+   ```bash
+   docker exec hcv-airflow-worker sh -c 'stat -f -c %T /mnt/reports; ls -la /mnt/reports'
+   ```
+
+On RHEL/Rocky with SELinux enforcing, also
+`setsebool -P container_use_cifs on`, or containers cannot read the mount even
+when the host can.
 
 #### Email sender (Gmail — active)
 
